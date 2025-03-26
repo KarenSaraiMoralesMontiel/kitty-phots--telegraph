@@ -11,6 +11,7 @@ app.get('/health', (request, response) => response.send('😻 Bot is healthy'))
 const CHAT_ID = process.env.CHAT_ID
 const ALBUM_PROCESSING_DELAY = 1500 // 1.5 seconds
 const mediaGroupCache = {}
+const PORT = process.env.PORT
 
 const createKittyService = require('./services/kittyService')
 const kittyService = createKittyService(process.env.KITTY_BACKEND)
