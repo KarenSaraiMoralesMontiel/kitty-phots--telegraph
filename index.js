@@ -5,6 +5,50 @@ dotenv.config()
 
 const app = express()
 
+// Get Railway environment
+const PORT = process.env.PORT || 3000;
+const RAILWAY_URL = process.env.RAILWAY_STATIC_URL || 
+                   `https://${process.env.RAILWAY_PROJECT_NAME}.up.railway.app`;
+const WEBHOOK_PATH = '/webhook';
+const WEBHOOK_URL = `${RAILWAY_URL}${WEBHOOK_PATH}`;
+
+// Middleware
+app.use(express.json());
+
+// Health check
+app.get('/health', (req, res) => res.send('😻 Bot is healthy'));
+
+// Webhook route (MUST be POST)
+app.post(WEBHOOK_PATH, (req, res) => {
+  return bot.webhookCallback(WEBHOOK_PATH)(req, res);
+});
+
+// Start server
+app.listen(PORT, async () => {
+  console.log(`Server running on port ${PORT}`);
+  
+  try {
+    // Configure webhook
+    await bot.telegram.setWebhook(WEBHOOK_URL, {
+      drop_pending_updates: true,
+      allowed_updates: ['message', 'callback_query']
+    });
+    console.log(`✅ Webhook set to: ${WEBHOOK_URL}`);
+
+    // Verify
+    const webhookInfo = await bot.telegram.getWebhookInfo();
+    console.log('Webhook details:', webhookInfo);
+  } catch (err) {
+    console.error('❌ Webhook setup failed:', err.message);
+    console.log('🔄 Falling back to polling mode...');
+    bot.launch();
+  }
+});
+
+// Error handling
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
+
 // Constants
 const CHAT_ID = process.env.CHAT_ID
 const ALBUM_PROCESSING_DELAY = 1500 // 1.5 seconds
@@ -198,36 +242,3 @@ bot.on('text', async (ctx) => {
     { reply_to_message_id: ctx.message.message_id }
   )
 })
-
-
-
-// Error handling
-bot.catch((err, ctx) => {
-  console.error('Bot error:', err.stack)
-  ctx?.reply?.('⚠️ An unexpected error occurred. Please try again later.')
-})
-
-const PORT = process.env.PORT
-const RAILWAY_URL = process.env.RAILWAY_STATIC_URL || `https://${process.env.RAILWAY_PROJECT_NAME}.up.railway.app`;
-
-const WEBHOOK_PATH = `/telegraf/${process.env.BOT_TOKEN}`;
-
-app.get('/health', (request, response) => response.send('😻 Bot is healthy'))
-
-// Webhook + Polling hybrid mode
-app.listen(PORT, async () => {
-  console.log(`Server running on port ${PORT}`);
-  
-  try {
-    await bot.telegram.setWebhook(`${RAILWAY_URL}${WEBHOOK_PATH}`);
-    console.log(`Webhook set to: ${RAILWAY_URL}${WEBHOOK_PATH}`);
-  } catch (err) {
-    console.error('Webhook setup failed:', err.message);
-    // Fallback to polling if webhook fails
-    bot.launch().then(() => console.log('Fallback to polling mode'));
-  }
-});
-
-// Error handling
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
