@@ -5,13 +5,11 @@ dotenv.config()
 
 const app = express()
 
-app.get('/health', (request, response) => response.send('😻 Bot is healthy'))
-
 // Constants
 const CHAT_ID = process.env.CHAT_ID
 const ALBUM_PROCESSING_DELAY = 1500 // 1.5 seconds
 const mediaGroupCache = {}
-const PORT = process.env.PORT
+
 
 const createKittyService = require('./services/kittyService')
 const kittyService = createKittyService(process.env.KITTY_BACKEND)
@@ -209,16 +207,26 @@ bot.catch((err, ctx) => {
   ctx?.reply?.('⚠️ An unexpected error occurred. Please try again later.')
 })
 
+const PORT = process.env.PORT
+const RAILWAY_URL = process.env.RAILWAY_STATIC_URL || `https://${process.env.RAILWAY_PROJECT_NAME}.up.railway.app`;
+
+const WEBHOOK_PATH = `/telegraf/${process.env.BOT_TOKEN}`;
+
+app.get('/health', (request, response) => response.send('😻 Bot is healthy'))
+
 // Webhook + Polling hybrid mode
-if (process.env.RAILWAY_ENVIRONMENT) {
-  // Production: Webhook mode
-  app.use(bot.webhookCallback('/secret-path'));
-  bot.telegram.setWebhook(`${process.env.RAILWAY_STATIC_URL}/secret-path`);
-  app.listen(PORT, () => console.log('Webhook bot running'));
-} else {
-  // Development: Polling mode
-  bot.launch().then(() => console.log('Polling bot started'));
-}
+app.listen(PORT, async () => {
+  console.log(`Server running on port ${PORT}`);
+  
+  try {
+    await bot.telegram.setWebhook(`${RAILWAY_URL}${WEBHOOK_PATH}`);
+    console.log(`Webhook set to: ${RAILWAY_URL}${WEBHOOK_PATH}`);
+  } catch (err) {
+    console.error('Webhook setup failed:', err.message);
+    // Fallback to polling if webhook fails
+    bot.launch().then(() => console.log('Fallback to polling mode'));
+  }
+});
 
 // Error handling
 process.once('SIGINT', () => bot.stop('SIGINT'));
