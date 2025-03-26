@@ -94,35 +94,39 @@ async function processPhotosBulk(ctx, photos, baseCaption, isAlbum = false) {
   }
 
   try {
-    // 1. Get file links in parallel with error handling
+    // 1. Process photos in parallel
     const fileLinks = await Promise.all(
-      photos.map(photo => ctx.telegram.getFileLink(photo.file_id)
-        .catch(e => {
-          console.error(`Failed to get file link for photo: ${e.message}`)
-          return null
-        })
-      )
-    )
-
-    // 2. Prepare valid uploads with metadata
-    const validUploads = fileLinks
-      .map((link, index) => {
-        if (!link) return null
-        
-        return {
-          photo_url: link.href,
-          filename: `photo_${Date.now()}_${index}.jpg`,
-          caption: isAlbum 
-            ? `${baseCaption} (${index + 1}/${photos.length})` 
-            : (baseCaption || 'A cutie!'),
-          original_photo: photos[index] // Keep reference for error handling
+      photos.map(async (photo) => {
+        try {
+          const fileLink = await ctx.telegram.getFileLink(photo.file_id);
+          return {
+            url: fileLink.href,
+            caption: ctx.message.caption || baseCaption || 'A cutie!',
+            original: photo
+          };
+        } catch (e) {
+          console.error(`Failed to process photo: ${e.message}`);
+          return null;
         }
       })
+    );
+  
+    // 2. Filter and format valid uploads
+    const validUploads = fileLinks
       .filter(Boolean)
-
-    if (!validUploads.length) {
-      throw new Error('All photo downloads failed')
+      .map((item, index) => ({
+        photo_url: item.url,
+        filename: `photo_${Date.now()}_${index}.jpg`,
+        caption: isAlbum 
+          ? `${item.caption} (${index + 1}/${photos.length})`
+          : item.caption,
+        original_photo: item.original
+      }));
+  
+    if (validUploads.length === 0) {
+      throw new Error('No valid photos to upload');
     }
+
 
     // 3. Upload to Cloudinary
     const uploadResponse = await kittyService.uploadPhotosFromTelegram(validUploads)
